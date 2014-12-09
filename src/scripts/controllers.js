@@ -15,7 +15,9 @@
 
 var adb = angular.module('chromeADB');
 
+
 adb.controller('controller', ['$scope', '$q', 'socketService', '$sce', function ($scope, $q, socketService, $sce) {
+
   $scope.host = '127.0.0.1';
   $scope.port = 5037;
   $scope.numOfXAxis = 15;
@@ -47,6 +49,7 @@ adb.controller('controller', ['$scope', '$q', 'socketService', '$sce', function 
   };
 
   $scope.initDeviceData = function () {
+    $scope.createInfo = null;
     $scope.packages = null;
     $scope.text = null;
     $scope.processList = null;
@@ -68,6 +71,7 @@ adb.controller('controller', ['$scope', '$q', 'socketService', '$sce', function 
       .then(function (createInfo) {
         var cmdWidthLength = makeCommand(cmd);
         // console.log('command:', cmdWidthLength);
+        $scope.createInfo = createInfo;
         return socketService.write(createInfo, cmdWidthLength);
       })
       .then(function (param) {
@@ -82,14 +86,53 @@ adb.controller('controller', ['$scope', '$q', 'socketService', '$sce', function 
       });
   };
 
+  $scope.getNewCommandPromise2 = function (cmd) {
+    return socketService.connect($scope.createInfo, $scope.host, $scope.port)
+      .then(function (createInfo) {
+        var cmdWidthLength = makeCommand(cmd);
+        console.log('command:', cmdWidthLength);
+        $scope.createInfo = createInfo;
+        return socketService.write(createInfo, cmdWidthLength);
+      })
+      .then(function (param) {
+        console.log(param);
+        return socketService.read(param.createInfo, 4);
+      })
+      .catch(function (param) {
+        $scope.initVariables();
+        $scope.logMessage = {
+          cmd: 'Connection Error',
+          res: 'run \"$ adb start-server\"'
+        };
+      });
+  };
+
+
+
+
   $scope.getCommandPromise = function (cmd, createInfo) {
     var cmdWidthLength = makeCommand(cmd);
-    // console.log('command:', cmdWidthLength);
+    console.log('command:', cmdWidthLength);
     return socketService.write(createInfo, cmdWidthLength)
       .then(function (param) {
         return socketService.read(param.createInfo, 4);
       });
   };
+
+  $scope.getCommandPromise2 = function (cmd, createInfo) {
+    var cmdWidthLength = makeCommand(cmd);
+    console.log('command:', cmdWidthLength);
+    return socketService.connect(createInfo, $scope.host, $scope.port)
+      .then(function (param) {
+        console.log("connect: ", param);
+        return socketService.write(createInfo, cmdWidthLength)
+      })
+      .then(function (param) {
+        return socketService.readPng(param.createInfo, arrayBufferToBinaryString);
+        //return socketService.read_png(param.createInfo, 1024);
+      });
+  };
+
 
   $scope.getByteCommandPromise = function (cmd, createInfo) {
     return socketService.writeBytes(createInfo, cmd)
@@ -120,6 +163,32 @@ adb.controller('controller', ['$scope', '$q', 'socketService', '$sce', function 
         };
       });
   };
+
+  $scope.getReadAllPromise2 = function (cmd1, cmd2) {
+    return $scope.getNewCommandPromise(cmd1)
+      .then(function (param) {
+        // console.log(param);
+        if (param.data === 'OKAY') {
+          return $scope.getCommandPromise(cmd2, param.createInfo);
+        }
+      })
+      .then(function (param) {
+        // console.log(param);
+        if (param && param.data === 'OKAY') {
+          return socketService.readPng(param.createInfo);
+          // debug
+          //return socketService.read_png(param.createInfo, 1024);
+        }
+      })
+      .catch(function (param) {
+        $scope.initVariables();
+        $scope.logMessage = {
+          cmd: 'Connection Error',
+          res: 'Cannot find any devices'
+        };
+      });
+  };
+
 
   /**
    * Sets connected devices, a number of devices to $scope.deviceInfoList, $scope.numOfDevices respectively.
@@ -167,6 +236,9 @@ adb.controller('controller', ['$scope', '$q', 'socketService', '$sce', function 
     $scope.initDeviceData();
     $scope.devInfo = $scope.deviceInfoList[serial];
     $scope.loadPackages(serial);
+    $scope.startScreenCap(serial);
+
+    //$scope.getScreenCap(serial);
 
     // show packages tab
     $(function () {
@@ -198,6 +270,54 @@ adb.controller('controller', ['$scope', '$q', 'socketService', '$sce', function 
         }
       });
   };
+
+  /**
+   * Start screencap
+   *
+   */
+  $scope.startScreenCap = function(serial) {
+    // 単発はdebug
+    //$scope.getScreenCap(serial);
+    $scope.screenCapIntervalInfo = window.setInterval(function() {
+      console.log(serial);
+      $scope.getScreenCap(serial);
+    }, 1000);
+  };
+
+
+
+  /**
+   * Get screencap
+   *
+   * $ adb shell screencap -p 2>/dev/null
+   */
+  $scope.getScreenCap = function(serial) {
+    var cmd1 = 'host:transport:' + serial;
+    var cmd2 = 'shell:screencap -p 2>/dev/null';
+
+    /*
+    console.log($scope.createInfo);
+    $scope.getCommandPromise2(cmd2, $scope.createInfo)
+      .then(function (param) {
+        if (param) {
+          var outImg = document.getElementById('out');
+          window.URL.revokeObjectURL(outImg.src);
+          outImg.src = param.data;
+        }
+      });
+      */
+    //$scope.getNewCommandPromise2(cmd2)
+    $scope.getReadAllPromise2(cmd1, cmd2)
+      .then(function (param) {
+        if (param) {
+          console.log(param.createInfo.socketId);
+          chrome.socket.destroy(param.createInfo.socketId);
+          var outImg = document.getElementById('out');
+          window.URL.revokeObjectURL(outImg.src);
+          outImg.src = param.data;
+        }
+      });
+  }
 
   /**
    * Handles a click event.
@@ -416,10 +536,10 @@ adb.controller('controller', ['$scope', '$q', 'socketService', '$sce', function 
       res: null
     };
 
-    console.log(serial, packageName);
+    // console.log(serial, packageName);
     $scope.getReadAllPromise(cmd1, cmd2)
       .then(function (param) {
-        console.log(serial, packageName);
+        // console.log(serial, packageName);
       });
   };
 
@@ -636,6 +756,8 @@ adb.controller('controller', ['$scope', '$q', 'socketService', '$sce', function 
    * @param serial
    */
   $scope.initMousePad = function (serial) {
+
+
     var cmd1 = 'host:transport:' + serial;
     $scope.logMessage = null;
     $scope.mousepadEnabled = false;
@@ -726,7 +848,7 @@ adb.controller('controller', ['$scope', '$q', 'socketService', '$sce', function 
       // console.log('dist : ' + dist);
       if (dist > 30) {
         cmd2 = 'shell:input touchscreen swipe ' + [x1, y1, x, y].join(' ');
-        console.log(cmd2);
+        // console.log(cmd2);
       }
     }
 
@@ -831,9 +953,10 @@ adb.controller('controller', ['$scope', '$q', 'socketService', '$sce', function 
     title = '[ChromeADB] ' + title;
     body = encodeURIComponent(body);
 
-    var to = 'chromeadb@gmail.com';
+    var to = 'koichiro.haga@mixi.co.jp';
     var mailto = $sce.trustAsHtml('mailto:' + to + '?subject=' + title + '&body=' + body);
     return '<a href="' + mailto + '" target="_blank">Send feedback</a>';
   };
+
 }]);
 

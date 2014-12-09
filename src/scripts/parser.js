@@ -235,4 +235,3 @@ function parseResolution(data) {
   }
   return {width: res[1], height: res[2]};
 }
-

@@ -6,6 +6,7 @@
     "angular": "~1.2.16",
     "angular-route": "~1.2.16",
     "angular-sanitize": "~1.2.16",
+    "angular-base64": "*",
     "bootstrap": "~3.0.2",
     "jqplot": "*"
   },

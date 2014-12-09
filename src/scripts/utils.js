@@ -26,13 +26,14 @@ function arrayBufferToString(buf, callback) {
 }
 
 function arrayBufferToBinaryString(buf, callback) {
-  var b = new Blob([new Uint8Array(buf)]);
+  var b = new Blob(buf);
   var f = new FileReader();
   f.onload = function (e) {
     callback(e.target.result);
   };
   f.readAsBinaryString(b);
 }
+
 
 /**
  * Converts string to ArrayBuffer.
@@ -71,4 +72,17 @@ function integerToArrayBuffer(value) {
   var result = new Uint32Array(1);
   result[0] = value;
   return result;
+}
+
+function ab2str(buf) {
+  return String.fromCharCode.apply(null, new Uint8Array(buf));
+}
+
+function str2ab(str) {
+  var buf = new ArrayBuffer(str.length);
+  var bufView = new Uint8Array(buf);
+  for (var i=0, strLen=str.length; i<strLen; i++) {
+    bufView[i] = str.charCodeAt(i);
+  }
+  return buf;
 }

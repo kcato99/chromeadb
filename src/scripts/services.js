@@ -4,9 +4,22 @@
 
 'use strict';
 
+//var adb = angular.module('chromeADB', ['base64']);
 var adb = angular.module('chromeADB');
 
+//adb.factory('socketService', ['$rootScope', '$q', '$base64', function ($rootScope, $q, $base64) {
 adb.factory('socketService', ['$rootScope', '$q', function ($rootScope, $q) {
+  /*
+  function base64_encode(binary) {
+    console.log('hagahahgagah');
+    var img = $base64.encode('a syn');
+    console.log('hagahahgagah');
+    console.log(img);
+    return img
+  }
+  */
+
+
   function create() {
     var defer = $q.defer();
 
@@ -16,7 +29,7 @@ adb.factory('socketService', ['$rootScope', '$q', function ($rootScope, $q) {
           defer.resolve(createInfo);
         });
       } else {
-        // console.log('create error:', createInfo);
+        console.log('create error:', createInfo);
       }
     });
 
@@ -46,6 +59,7 @@ adb.factory('socketService', ['$rootScope', '$q', function ($rootScope, $q) {
 
   function write(createInfo, str) {
     var defer = $q.defer();
+    // console.log('service:write:str[ ', str, ' ]');
 
     stringToArrayBuffer(str, function (bytes) {
       writeBytes(createInfo, bytes)
@@ -59,9 +73,7 @@ adb.factory('socketService', ['$rootScope', '$q', function ($rootScope, $q) {
 
   function writeBytes(createInfo, bytes) {
     var defer = $q.defer();
-
     chrome.socket.write(createInfo.socketId, bytes, function (writeInfo) {
-      // console.log('writeInfo:', writeInfo);
       if (writeInfo.bytesWritten > 0) {
         $rootScope.$apply(function () {
           var param = {
@@ -71,7 +83,7 @@ adb.factory('socketService', ['$rootScope', '$q', function ($rootScope, $q) {
           defer.resolve(param);
         });
       } else {
-        // console.log('write error:', arrayBuffer);
+        console.log('write error:', writeInfo.bytesWritten);
         defer.reject(writeInfo);
       }
     });
@@ -128,12 +140,49 @@ adb.factory('socketService', ['$rootScope', '$q', function ($rootScope, $q) {
     return defer.promise;
   }
 
+  function readPng(createInfo) {
+    var defer = $q.defer();
+    var data = [];
+    var blob, url, binary, arraybuffer;
+
+    (function readAllData() {
+      chrome.socket.read(createInfo.socketId, 4096, function (readInfo) {
+        if (readInfo.resultCode > 0) {
+          var str = ab2str(readInfo.data);
+          //binary = str.replace(/\r\n/g, "\n");
+          //var buf = str2ab(binary);
+          //data.push(buf);
+          data.push(str);
+          readAllData();
+        } else {
+          var string = data.join('');
+          binary = string.replace(/\r\n/g, "\n");
+          var buf = str2ab(binary);
+          $rootScope.$apply(function () {
+            //blob = new Blob(data, {type: "image/png"});
+            blob = new Blob([buf], {type: "image/png"});
+            url = window.URL.createObjectURL(blob);
+            var param = {
+              createInfo: createInfo,
+              data: url
+            };
+            defer.resolve(param);
+          });
+        }
+      });
+    })();
+
+    return defer.promise;
+
+  }
+
   return {
     create: create,
     connect: connect,
     write: write,
     writeBytes: writeBytes,
     read: read,
-    readAll: readAll
+    readAll: readAll,
+    readPng: readPng
   };
 }]);
